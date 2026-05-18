@@ -136,8 +136,8 @@ export default function Dashboard() {
     availableBanks: apiBanks, availableYears: apiYears, loading,
   } = useSelector((s: RootState) => s.dashboard);
 
-  const [selBanks, setSelBanks] = useState<string[]>([]);
-  const [selYears, setSelYears] = useState<number[]>([]);
+  const [selBanks, setSelBanks] = useState<string[]>(['ALL']);
+  const [selYears, setSelYears] = useState<any[]>(['ALL']);
   const [openIds, setOpenIds]   = useState<Set<string>>(new Set());
   const [sortCol, setSortCol]   = useState<string>('hierarchy');
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc'); // desc = LIFO by default
@@ -149,14 +149,16 @@ export default function Dashboard() {
   const apiHasData = apiBanks.length > 0 && apiSummary.length > 0;
   useEffect(() => {
     if (!apiHasData) return;
-    dispatch(fetchDashboardData({ bankIds: selBanks.join(','), years: selYears.join(',') }));
+    const bankIdsParam = selBanks.includes('ALL') ? '' : selBanks.join(',');
+    const yearsParam = selYears.includes('ALL') ? '' : selYears.join(',');
+    dispatch(fetchDashboardData({ bankIds: bankIdsParam, years: yearsParam }));
   }, [selBanks, selYears, apiHasData, dispatch]);
 
   // Mock data filtered client-side
   const mockRecords = useMemo(() => {
     let r = ALL_MOCK_RECORDS;
-    if (selBanks.length) r = r.filter(x => selBanks.includes(x.bankId));
-    if (selYears.length) r = r.filter(x => selYears.includes(x.year));
+    if (selBanks.length && !selBanks.includes('ALL')) r = r.filter(x => selBanks.includes(x.bankId));
+    if (selYears.length && !selYears.includes('ALL')) r = r.filter(x => selYears.includes(x.year));
     return r;
   }, [selBanks, selYears]);
 
@@ -493,17 +495,26 @@ export default function Dashboard() {
               multiple
               value={selBanks}
               onChange={(e) => {
-                const val = e.target.value;
-                setSelBanks(typeof val === 'string' ? val.split(',') : val as string[]);
+                const val = e.target.value as string[];
+                if (val.includes('ALL') && !selBanks.includes('ALL')) {
+                  setSelBanks(['ALL']);
+                } else {
+                  const filtered = val.filter(x => x !== 'ALL');
+                  setSelBanks(filtered.length === 0 ? ['ALL'] : filtered);
+                }
               }}
               input={<OutlinedInput label="Filter by Banks" sx={{ borderRadius: 2 }} />}
               renderValue={(selected) => {
                 const s = selected as string[];
-                if (s.length === 0) return 'All Banks';
+                if (s.includes('ALL')) return 'All Banks';
                 return s.map(id => banks.find(x => x.id === id)?.name ?? id).join(', ');
               }}
               MenuProps={{ PaperProps: { sx: { maxHeight: 300, borderRadius: 3 } } }}
             >
+              <MenuItem value="ALL" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>
+                <Checkbox size="small" checked={selBanks.includes('ALL')} sx={{ borderRadius: 1 }} />
+                <ListItemText primary="ALL" primaryTypographyProps={{ style: { fontSize: '0.875rem', fontWeight: 700, color: '#4f46e5' } }} />
+              </MenuItem>
               {banks.map(b => (
                 <MenuItem key={b.id} value={b.id} sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>
                   <Checkbox size="small" checked={selBanks.includes(b.id)} sx={{ borderRadius: 1 }} />
@@ -520,16 +531,26 @@ export default function Dashboard() {
               multiple
               value={selYears}
               onChange={(e) => {
-                const val = e.target.value;
-                setSelYears(typeof val === 'string' ? val.split(',').map(Number) : val as number[]);
+                const val = e.target.value as any[];
+                if (val.includes('ALL') && !selYears.includes('ALL')) {
+                  setSelYears(['ALL']);
+                } else {
+                  const filtered = val.filter(x => x !== 'ALL');
+                  setSelYears(filtered.length === 0 ? ['ALL'] : filtered);
+                }
               }}
               input={<OutlinedInput label="Filter by Years" sx={{ borderRadius: 2 }} />}
               renderValue={(selected) => {
-                const s = selected as number[];
-                return s.length === 0 ? 'All Years' : s.join(', ');
+                const s = selected as any[];
+                if (s.includes('ALL')) return 'All Years';
+                return s.join(', ');
               }}
               MenuProps={{ PaperProps: { sx: { maxHeight: 200, borderRadius: 3 } } }}
             >
+              <MenuItem value="ALL" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>
+                <Checkbox size="small" checked={selYears.includes('ALL')} sx={{ borderRadius: 1 }} />
+                <ListItemText primary="ALL" primaryTypographyProps={{ style: { fontSize: '0.875rem', fontWeight: 700, color: '#4f46e5' } }} />
+              </MenuItem>
               {years.map(y => (
                 <MenuItem key={y} value={y} sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>
                   <Checkbox size="small" checked={selYears.includes(y)} sx={{ borderRadius: 1 }} />
@@ -540,11 +561,11 @@ export default function Dashboard() {
           </FormControl>
 
           {/* Clear button */}
-          {(selBanks.length > 0 || selYears.length > 0) && (
+          {(!selBanks.includes('ALL') || !selYears.includes('ALL')) && (
             <Button
               variant="text"
               size="small"
-              onClick={() => { setSelBanks([]); setSelYears([]); }}
+              onClick={() => { setSelBanks(['ALL']); setSelYears(['ALL']); }}
               sx={{ color: 'primary.main', fontWeight: 700, borderRadius: 2 }}
             >
               Reset Filters
