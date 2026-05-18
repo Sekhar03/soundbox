@@ -125,10 +125,10 @@ export const updateIndentStatus = async (req: Request, res: Response) => {
       });
 
       if (status === 'INSTALLED') {
-        if (indent?.bank.name === 'Bank of Baroda' && !indent.jobSheetUploaded) {
+        if (indent?.bank.name === 'Bank of Baroda' && !(indent as any).jobSheetUploaded) {
           return res.status(400).json({ message: 'Installation cannot be completed without Job Sheet for Bank of Baroda' });
         }
-        if (indent?.bank.name === 'CBoI' && !indent.firstTransactionDate) {
+        if (indent?.bank.name === 'CBoI' && !(indent as any).firstTransactionDate) {
           return res.status(400).json({ message: 'Installation cannot be completed without First Transaction for CBoI' });
         }
       }
