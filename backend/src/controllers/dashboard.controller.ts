@@ -118,10 +118,31 @@ export const getDashboardData = async (req: Request, res: Response) => {
             const dayKey = format(safeDate(indent.indentDate), "yyyy-MM-dd");
             let dayNode = dayNodes.find((n) => n.id === dayKey);
             if (!dayNode) {
-              dayNode = { id: dayKey, label: dayKey, count: 0, type: "day" };
+              dayNode = { 
+                id: dayKey, 
+                label: dayKey, 
+                type: "day",
+                stats: {
+                  indentCount: 0,
+                  merchantAccept: 0,
+                  merchantDeny: 0,
+                  mappingDevicesCount: 0,
+                  pickupCount: 0,
+                  inTransitCount: 0,
+                  deliveryCount: 0,
+                  rtoCount: 0,
+                }
+              };
               dayNodes.push(dayNode);
             }
-            dayNode.count++;
+            dayNode.stats.indentCount++;
+            if (indent.merchantAcceptDeny === "ACCEPTED") dayNode.stats.merchantAccept++;
+            if (indent.merchantAcceptDeny === "DENIED") dayNode.stats.merchantDeny++;
+            if (indent.mappingStatus === "MAPPED") dayNode.stats.mappingDevicesCount++;
+            if (indent.pickupStatus) dayNode.stats.pickupCount++;
+            if (indent.deliveryStatus === "IN_TRANSIT") dayNode.stats.inTransitCount++;
+            if (indent.deliveryStatus === "DELIVERED") dayNode.stats.deliveryCount++;
+            if (indent.deliveryStatus.includes("RTO")) dayNode.stats.rtoCount++;
           });
           monthNodes.push({
             id: `${bankName}-${year}-${month}`,
