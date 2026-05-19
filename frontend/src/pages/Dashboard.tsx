@@ -711,6 +711,13 @@ export default function Dashboard() {
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
                 InputLabelProps={{ shrink: true }}
+                inputProps={{
+                  onClick: (e: any) => {
+                    try {
+                      e.target.showPicker();
+                    } catch (err) {}
+                  }
+                }}
                 sx={{ 
                   width: 155,
                   '& .MuiOutlinedInput-root': { borderRadius: 2 } 
@@ -724,6 +731,13 @@ export default function Dashboard() {
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
                 InputLabelProps={{ shrink: true }}
+                inputProps={{
+                  onClick: (e: any) => {
+                    try {
+                      e.target.showPicker();
+                    } catch (err) {}
+                  }
+                }}
                 sx={{ 
                   width: 155,
                   '& .MuiOutlinedInput-root': { borderRadius: 2 } 
