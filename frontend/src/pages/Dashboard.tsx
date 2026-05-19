@@ -20,7 +20,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, RootState } from '../store';
 import { fetchDashboardData } from '../store/slices/dashboardSlice';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import {
@@ -32,26 +32,45 @@ import type { PivotNode } from '../utils/mockData';
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const BANK_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#F97316','#06B6D4','#EC4899'];
 
+const COL_COLORS: Record<string, string> = {
+  'Indent Count': '#4f46e5',
+  'Merchant Deny': '#ef4444',
+  'Mapping Devices Count': '#6366f1',
+  'Pickup Count': '#f59e0b',
+  'In Transit Count': '#06b6d4',
+  'Delivery Count': '#10b981',
+  'RTO Count': '#ec4899',
+};
+
 const PIVOT_COLS = [
-  'Indent Count','Merchant Accept','Merchant Deny','Mapping Devices Count',
+  'Indent Count','Merchant Deny','Mapping Devices Count',
   'Pickup Count','In Transit Count','Delivery Count','RTO Count',
 ];
 
+const COL_KEY_MAP: Record<string, string> = {
+  'Indent Count': 'indentCount',
+  'Merchant Deny': 'merchantDeny',
+  'Mapping Devices Count': 'mappingDevicesCount',
+  'Pickup Count': 'pickupCount',
+  'In Transit Count': 'inTransitCount',
+  'Delivery Count': 'deliveryCount',
+  'RTO Count': 'rtoCount',
+};
+
 // ─── Pivot helpers ──────────────────────────────────────────────────────────────
 interface PivotStats {
-  indentCount: number; merchantAccept: number; merchantDeny: number;
+  indentCount: number; merchantDeny: number;
   mappingDevicesCount: number; pickupCount: number; inTransitCount: number;
   deliveryCount: number; rtoCount: number;
 }
 const ZERO: PivotStats = {
-  indentCount:0, merchantAccept:0, merchantDeny:0, mappingDevicesCount:0,
+  indentCount:0, merchantDeny:0, mappingDevicesCount:0,
   pickupCount:0, inTransitCount:0, deliveryCount:0, rtoCount:0,
 };
 
 function addStats(a: PivotStats, b: PivotStats): PivotStats {
   return {
     indentCount:          a.indentCount          + b.indentCount,
-    merchantAccept:       a.merchantAccept       + b.merchantAccept,
     merchantDeny:         a.merchantDeny         + b.merchantDeny,
     mappingDevicesCount:  a.mappingDevicesCount  + b.mappingDevicesCount,
     pickupCount:          a.pickupCount          + b.pickupCount,
@@ -71,7 +90,7 @@ function getStats(node: PivotNode): PivotStats {
 }
 
 function statsArr(s: PivotStats): number[] {
-  return [s.indentCount, s.merchantAccept, s.merchantDeny, s.mappingDevicesCount,
+  return [s.indentCount, s.merchantDeny, s.mappingDevicesCount,
           s.pickupCount, s.inTransitCount, s.deliveryCount, s.rtoCount];
 }
 
@@ -138,12 +157,14 @@ export default function Dashboard() {
 
   const [selBanks, setSelBanks] = useState<string[]>(['ALL']);
   const [selYears, setSelYears] = useState<any[]>(['ALL']);
+  const [selCols, setSelCols]   = useState<string[]>(PIVOT_COLS);
+  const [dateFilter, setDateFilter] = useState<string>('ALL');
   const [openIds, setOpenIds]   = useState<Set<string>>(new Set());
   const [sortCol, setSortCol]   = useState<string>('hierarchy');
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc'); // desc = LIFO by default
 
   // Initial API fetch
-  useEffect(() => { dispatch(fetchDashboardData({ bankIds: '', years: '' })); }, [dispatch]);
+  useEffect(() => { dispatch(fetchDashboardData({ bankIds: '', years: '', dateFilter: 'ALL' })); }, [dispatch]);
 
   // Re-fetch when API has data and filters change
   const apiHasData = apiBanks.length > 0 && apiSummary.length > 0;
@@ -151,16 +172,38 @@ export default function Dashboard() {
     if (!apiHasData) return;
     const bankIdsParam = selBanks.includes('ALL') ? '' : selBanks.join(',');
     const yearsParam = selYears.includes('ALL') ? '' : selYears.join(',');
-    dispatch(fetchDashboardData({ bankIds: bankIdsParam, years: yearsParam }));
-  }, [selBanks, selYears, apiHasData, dispatch]);
+    dispatch(fetchDashboardData({ bankIds: bankIdsParam, years: yearsParam, dateFilter }));
+  }, [selBanks, selYears, dateFilter, apiHasData, dispatch]);
 
   // Mock data filtered client-side
   const mockRecords = useMemo(() => {
     let r = ALL_MOCK_RECORDS;
     if (selBanks.length && !selBanks.includes('ALL')) r = r.filter(x => selBanks.includes(x.bankId));
     if (selYears.length && !selYears.includes('ALL')) r = r.filter(x => selYears.includes(x.year));
+    
+    // Date preset filter
+    if (dateFilter !== 'ALL') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const yesterdayStr = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      if (dateFilter === 'TODAY') {
+        r = r.filter(x => x.date === todayStr);
+      } else if (dateFilter === 'YESTERDAY') {
+        r = r.filter(x => x.date === yesterdayStr);
+      } else if (dateFilter === 'LAST_7_DAYS') {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        r = r.filter(x => {
+          const itemDate = new Date(x.date);
+          return itemDate >= sevenDaysAgo;
+        });
+      }
+    }
     return r;
-  }, [selBanks, selYears]);
+  }, [selBanks, selYears, dateFilter]);
+
+  const visibleCols = useMemo(() => {
+    return PIVOT_COLS.filter(c => selCols.includes(c));
+  }, [selCols]);
 
   // Resolved display data
   const banks   = apiHasData ? apiBanks    : MOCK_BANKS;
@@ -249,14 +292,10 @@ export default function Dashboard() {
               <th>Year</th>
               <th>Month</th>
               <th>Date</th>
-              <th class="num-hdr">Indent Count</th>
-              <th class="num-hdr">Merchant Accept</th>
-              <th class="num-hdr red-hdr">Merchant Deny</th>
-              <th class="num-hdr">Mapping Devices Count</th>
-              <th class="num-hdr">Pickup Count</th>
-              <th class="num-hdr">In Transit Count</th>
-              <th class="num-hdr">Delivery Count</th>
-              <th class="num-hdr red-hdr">RTO Count</th>
+              ${visibleCols.map(c => {
+                const isRed = c === 'Merchant Deny' || c === 'RTO Count';
+                return `<th class="num-hdr ${isRed ? 'red-hdr' : ''}">${c}</th>`;
+              }).join('')}
             </tr>
           </thead>
           <tbody>
@@ -307,14 +346,11 @@ export default function Dashboard() {
           <td>${yearVal}</td>
           <td>${monthVal}</td>
           <td>${dateVal}</td>
-          <td class="num">${stats.indentCount}</td>
-          <td class="num">${stats.merchantAccept}</td>
-          <td class="num red-num">${stats.merchantDeny}</td>
-          <td class="num">${stats.mappingDevicesCount}</td>
-          <td class="num">${stats.pickupCount}</td>
-          <td class="num">${stats.inTransitCount}</td>
-          <td class="num">${stats.deliveryCount}</td>
-          <td class="num red-num">${stats.rtoCount}</td>
+          ${visibleCols.map(c => {
+            const isRed = c === 'Merchant Deny' || c === 'RTO Count';
+            const val = (stats as any)[COL_KEY_MAP[c]] ?? 0;
+            return `<td class="${isRed ? 'red-num' : 'num'}">${val}</td>`;
+          }).join('')}
         </tr>
       `;
     });
@@ -326,14 +362,11 @@ export default function Dashboard() {
             <td></td>
             <td></td>
             <td></td>
-            <td class="num">${total.indentCount}</td>
-            <td class="num">${total.merchantAccept}</td>
-            <td class="num red-total">${total.merchantDeny}</td>
-            <td class="num">${total.mappingDevicesCount}</td>
-            <td class="num">${total.pickupCount}</td>
-            <td class="num">${total.inTransitCount}</td>
-            <td class="num">${total.deliveryCount}</td>
-            <td class="num red-total">${total.rtoCount}</td>
+            ${visibleCols.map(c => {
+              const isRed = c === 'Merchant Deny' || c === 'RTO Count';
+              const val = (total as any)[COL_KEY_MAP[c]] ?? 0;
+              return `<td class="${isRed ? 'red-total' : 'num'}">${val}</td>`;
+            }).join('')}
           </tr>
         </tbody>
       </table>
@@ -419,7 +452,6 @@ export default function Dashboard() {
   const total = useMemo(() =>
     summary.reduce((a, r) => ({
       indentCount:         a.indentCount         + r.indentCount,
-      merchantAccept:      a.merchantAccept      + r.merchantAccept,
       merchantDeny:        a.merchantDeny        + r.merchantDeny,
       mappingDevicesCount: a.mappingDevicesCount + r.mappingDevicesCount,
       pickupCount:         a.pickupCount         + r.pickupCount,
@@ -447,6 +479,28 @@ export default function Dashboard() {
       return row;
     });
   }, [graph, bankNames]);
+
+  const visibleCards = useMemo(() => {
+    const cards = [
+      { label: 'Indent Count',     value: total.indentCount,     isRed: false, color: '#4f46e5', field: 'indentCount' },
+      { label: 'Merchant Deny',    value: total.merchantDeny,    isRed: true,  color: '#ef4444', field: 'merchantDeny' },
+      { label: 'Devices Mapped',   value: total.mappingDevicesCount, isRed: false, color: '#6366f1', field: 'mappingDevicesCount' },
+      { label: 'Pickup Count',     value: total.pickupCount,     isRed: false, color: '#f59e0b', field: 'pickupCount' },
+      { label: 'In Transit',       value: total.inTransitCount,  isRed: false, color: '#06b6d4', field: 'inTransitCount' },
+      { label: 'Delivery Count',   value: total.deliveryCount,   isRed: false, color: '#10b981', field: 'deliveryCount' },
+      { label: 'RTO Count',        value: total.rtoCount,        isRed: true,  color: '#ef4444', field: 'rtoCount' },
+    ];
+    const cardLabelMap: Record<string, string> = {
+      'Indent Count': 'Indent Count',
+      'Merchant Deny': 'Merchant Deny',
+      'Devices Mapped': 'Mapping Devices Count',
+      'Pickup Count': 'Pickup Count',
+      'In Transit': 'In Transit Count',
+      'Delivery Count': 'Delivery Count',
+      'RTO Count': 'RTO Count'
+    };
+    return cards.filter(c => selCols.includes(cardLabelMap[c.label]));
+  }, [total, selCols]);
 
   return (
     <Box sx={{ pb: 6, px: { xs: 1, sm: 3 } }}>
@@ -489,7 +543,7 @@ export default function Dashboard() {
           <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center', borderColor: 'divider' }} />
 
           {/* Bank dropdown */}
-          <FormControl size="small" sx={{ minWidth: 240 }}>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
             <InputLabel>Filter by Banks</InputLabel>
             <Select
               multiple
@@ -525,7 +579,7 @@ export default function Dashboard() {
           </FormControl>
 
           {/* Year dropdown */}
-          <FormControl size="small" sx={{ minWidth: 160 }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Filter by Years</InputLabel>
             <Select
               multiple
@@ -560,12 +614,55 @@ export default function Dashboard() {
             </Select>
           </FormControl>
 
-          {/* Clear button */}
-          {(!selBanks.includes('ALL') || !selYears.includes('ALL')) && (
+          {/* Columns selector dropdown (dynamic column filter) */}
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Select Columns</InputLabel>
+            <Select
+              multiple
+              value={selCols}
+              onChange={(e) => {
+                const val = e.target.value as string[];
+                if (val.length > 0) setSelCols(val);
+              }}
+              input={<OutlinedInput label="Select Columns" sx={{ borderRadius: 2 }} />}
+              renderValue={(selected) => {
+                const s = selected as string[];
+                if (s.length === PIVOT_COLS.length) return 'All Columns';
+                return `${s.length} Columns`;
+              }}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 300, borderRadius: 3 } } }}
+            >
+              {PIVOT_COLS.map(c => (
+                <MenuItem key={c} value={c} sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>
+                  <Checkbox size="small" checked={selCols.includes(c)} sx={{ borderRadius: 1 }} />
+                  <ListItemText primary={c} primaryTypographyProps={{ style: { fontSize: '0.875rem', fontWeight: 500 } }} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* Time Range dropdown */}
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Time Range</InputLabel>
+            <Select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as string)}
+              input={<OutlinedInput label="Time Range" sx={{ borderRadius: 2 }} />}
+              MenuProps={{ PaperProps: { sx: { borderRadius: 3 } } }}
+            >
+              <MenuItem value="ALL" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>All Time</MenuItem>
+              <MenuItem value="TODAY" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Today</MenuItem>
+              <MenuItem value="YESTERDAY" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Yesterday</MenuItem>
+              <MenuItem value="LAST_7_DAYS" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Last 7 Days</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Reset button */}
+          {(!selBanks.includes('ALL') || !selYears.includes('ALL') || dateFilter !== 'ALL' || selCols.length !== PIVOT_COLS.length) && (
             <Button
               variant="text"
               size="small"
-              onClick={() => { setSelBanks(['ALL']); setSelYears(['ALL']); }}
+              onClick={() => { setSelBanks(['ALL']); setSelYears(['ALL']); setDateFilter('ALL'); setSelCols(PIVOT_COLS); }}
               sx={{ color: 'primary.main', fontWeight: 700, borderRadius: 2 }}
             >
               Reset Filters
@@ -577,17 +674,8 @@ export default function Dashboard() {
       {/* ── Individual Premium KPI Cards (Total Summary) ── */}
       <Box sx={{ mb: 4 }}>
         <Grid container spacing={2.5}>
-          {([
-            { label: 'Indent Count',     value: total.indentCount,     isRed: false, color: '#4f46e5', field: 'indentCount' },
-            { label: 'Merchant Accept',  value: total.merchantAccept,  isRed: false, color: '#10b981', field: 'merchantAccept' },
-            { label: 'Merchant Deny',    value: total.merchantDeny,    isRed: true,  color: '#ef4444', field: 'merchantDeny' },
-            { label: 'Devices Mapped',   value: total.mappingDevicesCount, isRed: false, color: '#6366f1', field: 'mappingDevicesCount' },
-            { label: 'Pickup Count',     value: total.pickupCount,     isRed: false, color: '#f59e0b', field: 'pickupCount' },
-            { label: 'In Transit',       value: total.inTransitCount,  isRed: false, color: '#06b6d4', field: 'inTransitCount' },
-            { label: 'Delivery Count',   value: total.deliveryCount,   isRed: false, color: '#10b981', field: 'deliveryCount' },
-            { label: 'RTO Count',        value: total.rtoCount,        isRed: true,  color: '#ef4444', field: 'rtoCount' },
-          ]).map(item => {
-            const isGreenAccent = item.label === 'Merchant Accept' || item.label === 'Delivery Count';
+          {visibleCards.map(item => {
+            const isGreenAccent = item.label === 'Delivery Count';
             const cardBg = item.isRed
               ? 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)'
               : isGreenAccent
@@ -599,7 +687,7 @@ export default function Dashboard() {
                 ? 'rgba(16, 185, 129, 0.25)'
                 : 'rgba(226, 232, 240, 0.8)';
             return (
-              <Grid item xs={12} sm={6} md={3} lg={1.5} key={item.label}>
+              <Grid item xs={12} sm={6} md={3} lg={visibleCards.length <= 4 ? 3 : visibleCards.length <= 6 ? 2 : 1.7} key={item.label}>
                 <Card 
                   variant="outlined" 
                   sx={{ 
@@ -723,10 +811,10 @@ export default function Dashboard() {
           <Table size="small" sx={{ tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 280 }} />
-              {PIVOT_COLS.map(c => {
+              {visibleCols.map(c => {
                 let w = 135;
                 if (c === 'Mapping Devices Count') w = 195;
-                else if (c === 'Merchant Accept' || c === 'In Transit Count') w = 155;
+                else if (c === 'In Transit Count') w = 155;
                 else if (c === 'Merchant Deny') w = 145;
                 return <col key={c} style={{ width: w }} />;
               })}
@@ -759,7 +847,7 @@ export default function Dashboard() {
                 </TableCell>
 
                 {/* Sortable stats headers */}
-                {PIVOT_COLS.map(c => {
+                {visibleCols.map(c => {
                   const isRed = c === 'Merchant Deny' || c === 'RTO Count';
                   return (
                     <TableCell
@@ -846,12 +934,13 @@ export default function Dashboard() {
                       </Stack>
                     </TableCell>
                     
-                    {/* 8 stats — each in its own fixed-width column */}
-                    {statsArr(s).map((v, i) => {
-                      const isRed = i === 2 || i === 7;
+                    {/* dynamic stats — each in its own column */}
+                    {visibleCols.map(c => {
+                      const isRed = c === 'Merchant Deny' || c === 'RTO Count';
+                      const v = (s as any)[COL_KEY_MAP[c]] ?? 0;
                       return (
                         <TableCell
-                          key={i}
+                          key={c}
                           align="right"
                           sx={{
                             py: 0.8,
@@ -880,12 +969,12 @@ export default function Dashboard() {
                     Grand Total
                   </Typography>
                 </TableCell>
-                {[total.indentCount, total.merchantAccept, total.merchantDeny, total.mappingDevicesCount,
-                  total.pickupCount, total.inTransitCount, total.deliveryCount, total.rtoCount].map((v, i) => {
-                  const isRed = i === 2 || i === 7;
+                {visibleCols.map(c => {
+                  const isRed = c === 'Merchant Deny' || c === 'RTO Count';
+                  const v = (total as any)[COL_KEY_MAP[c]] ?? 0;
                   return (
                     <TableCell
-                      key={i}
+                      key={c}
                       align="right"
                       sx={{
                         py: 1.5,
@@ -985,6 +1074,85 @@ export default function Dashboard() {
                   />
                 ))}
               </LineChart>
+            </ResponsiveContainer>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* ── Stacked Bar Chart (Dynamic breakdown per Bank based on selected columns) ── */}
+      <Card 
+        variant="outlined" 
+        sx={{ 
+          mt: 4,
+          borderRadius: 4,
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.02)',
+          borderColor: 'rgba(226, 232, 240, 0.8)',
+          overflow: 'hidden'
+        }}
+      >
+        <Box 
+          sx={{ 
+            px: 3, 
+            py: 2, 
+            borderBottom: '1px solid', 
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            bgcolor: '#ffffff'
+          }}
+        >
+          <Box sx={{ width: 4, height: 18, bgcolor: 'secondary.main', borderRadius: 2 }} />
+          <Typography variant="h6" fontWeight={800} color="text.primary">
+            Bank-wise Stacked Metric Distribution
+          </Typography>
+        </Box>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ height: 380 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={summary} margin={{ top: 12, right: 32, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
+                <XAxis 
+                  dataKey="bank" 
+                  tick={{ fontSize: 10, fill: '#475569', fontWeight: 600 }} 
+                  tickLine={false} 
+                  dy={8}
+                />
+                <YAxis 
+                  tick={{ fontSize: 10, fill: '#475569', fontWeight: 600 }} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  dx={-8}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    fontSize: 12, 
+                    borderRadius: 12, 
+                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.08)', 
+                    border: '1px solid #e2e8f0',
+                    fontFamily: '"Inter", sans-serif'
+                  }} 
+                  labelStyle={{ fontWeight: 800, color: '#0f172a', marginBottom: 4 }} 
+                />
+                <Legend 
+                  wrapperStyle={{ 
+                    fontSize: 11, 
+                    paddingTop: 16, 
+                    fontWeight: 600,
+                    fontFamily: '"Inter", sans-serif'
+                  }} 
+                />
+                {visibleCols.map(c => (
+                  <Bar 
+                    key={c} 
+                    dataKey={COL_KEY_MAP[c]} 
+                    name={c} 
+                    stackId="a" 
+                    fill={COL_COLORS[c] ?? '#cbd5e1'} 
+                    radius={[2, 2, 0, 0]}
+                  />
+                ))}
+              </BarChart>
             </ResponsiveContainer>
           </Box>
         </CardContent>

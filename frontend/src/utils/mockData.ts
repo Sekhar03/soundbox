@@ -10,7 +10,7 @@ export const MOCK_BANKS = [
   { id: 'bank-8', name: 'PNB' },
 ];
 
-export const MOCK_YEARS = [2024, 2025];
+export const MOCK_YEARS = [2024, 2025, new Date().getFullYear()];
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -79,11 +79,37 @@ function makeRecord(
 // 8 banks × 2 years × 12 months × 2 dates = 384 raw records
 export const ALL_MOCK_RECORDS: MockRecord[] = [];
 for (const bank of MOCK_BANKS) {
-  for (const year of MOCK_YEARS) {
+  // Historical data
+  for (const year of [2024, 2025]) {
     for (let m = 0; m < 12; m++) {
       ALL_MOCK_RECORDS.push(makeRecord(bank, year, m, 8));
       ALL_MOCK_RECORDS.push(makeRecord(bank, year, m, 22));
     }
+  }
+
+  // Dynamic Recent data (Today, Yesterday, Last 7 Days)
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  
+  // Today's record
+  ALL_MOCK_RECORDS.push({
+    ...makeRecord(bank, today.getFullYear(), today.getMonth(), today.getDate()),
+    date: today.toISOString().split('T')[0],
+  });
+
+  // Yesterday's record
+  ALL_MOCK_RECORDS.push({
+    ...makeRecord(bank, yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()),
+    date: yesterday.toISOString().split('T')[0],
+  });
+
+  // Last 2–7 Days records
+  for (let i = 2; i < 7; i++) {
+    const pastDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+    ALL_MOCK_RECORDS.push({
+      ...makeRecord(bank, pastDate.getFullYear(), pastDate.getMonth(), pastDate.getDate()),
+      date: pastDate.toISOString().split('T')[0],
+    });
   }
 }
 

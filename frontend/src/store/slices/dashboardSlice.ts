@@ -3,11 +3,12 @@ import api from '../../services/api';
 
 export const fetchDashboardData = createAsyncThunk(
   'dashboard/fetchData',
-  async (filters: { bankIds?: string; years?: string } | undefined, { rejectWithValue }) => {
+  async (filters: { bankIds?: string; years?: string; dateFilter?: string } | undefined, { rejectWithValue }) => {
     try {
       const params = new URLSearchParams();
       if (filters?.bankIds) params.append('bankIds', filters.bankIds);
       if (filters?.years) params.append('years', filters.years);
+      if (filters?.dateFilter) params.append('dateFilter', filters.dateFilter);
       
       const response = await api.get(`/dashboard/data?${params.toString()}`);
       return response.data;

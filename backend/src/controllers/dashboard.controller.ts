@@ -11,7 +11,7 @@ function safeDate(val: any): Date {
 
 export const getDashboardData = async (req: Request, res: Response) => {
   try {
-    const { bankIds, years } = req.query;
+    const { bankIds, years, dateFilter } = req.query;
 
     // Fix 2: trim + filter(Boolean) so an empty-string query param yields []
     const bankFilter =
@@ -26,6 +26,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
             .split(",")
             .map(Number)
             .filter((n) => !isNaN(n) && n > 0)
+            .filter(Boolean)
         : [];
 
     // Fix 1: SQLite-compatible NOT syntax — `{ not: '...' }` crashes on SQLite Prisma
@@ -45,6 +46,33 @@ export const getDashboardData = async (req: Request, res: Response) => {
         },
       }));
       where.OR = yearConditions;
+    }
+
+    // Apply Today / Yesterday / Last 7 Days filter
+    if (dateFilter && dateFilter !== "ALL") {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+      if (dateFilter === "TODAY") {
+        where.indentDate = {
+          gte: startOfToday,
+          lte: endOfToday,
+        };
+      } else if (dateFilter === "YESTERDAY") {
+        const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+        const endOfYesterday = new Date(endOfToday.getTime() - 24 * 60 * 60 * 1000);
+        where.indentDate = {
+          gte: startOfYesterday,
+          lte: endOfYesterday,
+        };
+      } else if (dateFilter === "LAST_7_DAYS") {
+        const startOf7DaysAgo = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
+        where.indentDate = {
+          gte: startOf7DaysAgo,
+          lte: endOfToday,
+        };
+      }
     }
 
     const indents = await prisma.indent.findMany({

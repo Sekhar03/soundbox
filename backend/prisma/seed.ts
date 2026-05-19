@@ -158,11 +158,19 @@ async function main() {
     const courierName = courierNames[i % courierNames.length];
     const deliveryType = i % 2 === 0 ? "OPEX" : "CAPEX";
 
-    const year = j % 2 === 0 ? 2024 : 2025;
-    const month = j % 12; // 0-based (0 = Jan, 11 = Dec)
-    const day = (j % 28) + 1; // 1–28, valid for every month
-
-    const indentDate = new Date(year, month, day);
+    let indentDate: Date;
+    if (j === 0) {
+      indentDate = new Date(); // Today
+    } else if (j === 1) {
+      indentDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // Yesterday
+    } else if (j >= 2 && j <= 5) {
+      indentDate = new Date(Date.now() - j * 24 * 60 * 60 * 1000); // spread in the Last 7 Days
+    } else {
+      const year = j % 2 === 0 ? 2024 : 2025;
+      const month = j % 12; // 0-based (0 = Jan, 11 = Dec)
+      const day = (j % 28) + 1; // 1–28, valid for every month
+      indentDate = new Date(year, month, day);
+    }
 
     const status = getStatusBucket(i);
 
