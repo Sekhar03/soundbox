@@ -11,7 +11,7 @@ function safeDate(val: any): Date {
 
 export const getDashboardData = async (req: Request, res: Response) => {
   try {
-    const { bankIds, years, dateFilter } = req.query;
+    const { bankIds, years, dateFilter, fromDate, toDate } = req.query;
 
     // Fix 2: trim + filter(Boolean) so an empty-string query param yields []
     const bankFilter =
@@ -48,7 +48,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
       where.OR = yearConditions;
     }
 
-    // Apply Today / Yesterday / Last 7 Days filter
+    // Apply Today / Yesterday / Last 7 Days / Last Month / Last 3 Months / Last 6 Months / Custom Range filter
     if (dateFilter && dateFilter !== "ALL") {
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -71,6 +71,32 @@ export const getDashboardData = async (req: Request, res: Response) => {
         where.indentDate = {
           gte: startOf7DaysAgo,
           lte: endOfToday,
+        };
+      } else if (dateFilter === "LAST_MONTH") {
+        const startOfLastMonth = new Date(startOfToday.getTime() - 30 * 24 * 60 * 60 * 1000);
+        where.indentDate = {
+          gte: startOfLastMonth,
+          lte: endOfToday,
+        };
+      } else if (dateFilter === "LAST_3_MONTHS") {
+        const startOf3Months = new Date(startOfToday.getTime() - 90 * 24 * 60 * 60 * 1000);
+        where.indentDate = {
+          gte: startOf3Months,
+          lte: endOfToday,
+        };
+      } else if (dateFilter === "LAST_6_MONTHS") {
+        const startOf6Months = new Date(startOfToday.getTime() - 180 * 24 * 60 * 60 * 1000);
+        where.indentDate = {
+          gte: startOf6Months,
+          lte: endOfToday,
+        };
+      } else if (dateFilter === "CUSTOM" && fromDate && toDate) {
+        const startCustom = new Date(fromDate as string);
+        const endCustom = new Date(toDate as string);
+        endCustom.setHours(23, 59, 59, 999);
+        where.indentDate = {
+          gte: startCustom,
+          lte: endCustom,
         };
       }
     }

@@ -4,7 +4,7 @@ import {
   TableHead, TableRow, IconButton, Checkbox, CircularProgress,
   Stack, Card, CardContent, Divider, Grid,
   FormControl, InputLabel, Select, MenuItem, ListItemText, OutlinedInput,
-  Button,
+  Button, TextField,
 } from '@mui/material';
 
 import {
@@ -159,12 +159,14 @@ export default function Dashboard() {
   const [selYears, setSelYears] = useState<any[]>(['ALL']);
   const [selCols, setSelCols]   = useState<string[]>(PIVOT_COLS);
   const [dateFilter, setDateFilter] = useState<string>('ALL');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate]     = useState<string>('');
   const [openIds, setOpenIds]   = useState<Set<string>>(new Set());
   const [sortCol, setSortCol]   = useState<string>('hierarchy');
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc'); // desc = LIFO by default
 
   // Initial API fetch
-  useEffect(() => { dispatch(fetchDashboardData({ bankIds: '', years: '', dateFilter: 'ALL' })); }, [dispatch]);
+  useEffect(() => { dispatch(fetchDashboardData({ bankIds: '', years: '', dateFilter: 'ALL', fromDate: '', toDate: '' })); }, [dispatch]);
 
   // Re-fetch when API has data and filters change
   const apiHasData = apiBanks.length > 0 && apiSummary.length > 0;
@@ -172,8 +174,12 @@ export default function Dashboard() {
     if (!apiHasData) return;
     const bankIdsParam = selBanks.includes('ALL') ? '' : selBanks.join(',');
     const yearsParam = selYears.includes('ALL') ? '' : selYears.join(',');
-    dispatch(fetchDashboardData({ bankIds: bankIdsParam, years: yearsParam, dateFilter }));
-  }, [selBanks, selYears, dateFilter, apiHasData, dispatch]);
+    
+    // Only re-fetch for CUSTOM if both dates are set
+    if (dateFilter === 'CUSTOM' && (!fromDate || !toDate)) return;
+
+    dispatch(fetchDashboardData({ bankIds: bankIdsParam, years: yearsParam, dateFilter, fromDate, toDate }));
+  }, [selBanks, selYears, dateFilter, fromDate, toDate, apiHasData, dispatch]);
 
   // Mock data filtered client-side
   const mockRecords = useMemo(() => {
@@ -183,7 +189,8 @@ export default function Dashboard() {
     
     // Date preset filter
     if (dateFilter !== 'ALL') {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
       const yesterdayStr = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
       if (dateFilter === 'TODAY') {
@@ -196,10 +203,36 @@ export default function Dashboard() {
           const itemDate = new Date(x.date);
           return itemDate >= sevenDaysAgo;
         });
+      } else if (dateFilter === 'LAST_MONTH') {
+        const startOfLastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        r = r.filter(x => {
+          const itemDate = new Date(x.date);
+          return itemDate >= startOfLastMonth;
+        });
+      } else if (dateFilter === 'LAST_3_MONTHS') {
+        const startOf3Months = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        r = r.filter(x => {
+          const itemDate = new Date(x.date);
+          return itemDate >= startOf3Months;
+        });
+      } else if (dateFilter === 'LAST_6_MONTHS') {
+        const startOf6Months = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
+        r = r.filter(x => {
+          const itemDate = new Date(x.date);
+          return itemDate >= startOf6Months;
+        });
+      } else if (dateFilter === 'CUSTOM' && fromDate && toDate) {
+        const startCustom = new Date(fromDate);
+        const endCustom = new Date(toDate);
+        endCustom.setHours(23, 59, 59, 999);
+        r = r.filter(x => {
+          const itemDate = new Date(x.date);
+          return itemDate >= startCustom && itemDate <= endCustom;
+        });
       }
     }
     return r;
-  }, [selBanks, selYears, dateFilter]);
+  }, [selBanks, selYears, dateFilter, fromDate, toDate]);
 
   const visibleCols = useMemo(() => {
     return PIVOT_COLS.filter(c => selCols.includes(c));
@@ -646,7 +679,14 @@ export default function Dashboard() {
             <InputLabel>Time Range</InputLabel>
             <Select
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as string)}
+              onChange={(e) => {
+                const val = e.target.value as string;
+                setDateFilter(val);
+                if (val !== 'CUSTOM') {
+                  setFromDate('');
+                  setToDate('');
+                }
+              }}
               input={<OutlinedInput label="Time Range" sx={{ borderRadius: 2 }} />}
               MenuProps={{ PaperProps: { sx: { borderRadius: 3 } } }}
             >
@@ -654,15 +694,57 @@ export default function Dashboard() {
               <MenuItem value="TODAY" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Today</MenuItem>
               <MenuItem value="YESTERDAY" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Yesterday</MenuItem>
               <MenuItem value="LAST_7_DAYS" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Last 7 Days</MenuItem>
+              <MenuItem value="LAST_MONTH" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Last Month</MenuItem>
+              <MenuItem value="LAST_3_MONTHS" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Last 3 Months</MenuItem>
+              <MenuItem value="LAST_6_MONTHS" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Last 6 Months</MenuItem>
+              <MenuItem value="CUSTOM" sx={{ borderRadius: 1.5, my: 0.25, mx: 0.5 }}>Custom Range</MenuItem>
             </Select>
           </FormControl>
 
+          {/* Custom Date Pickers */}
+          {dateFilter === 'CUSTOM' && (
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <TextField
+                size="small"
+                type="date"
+                label="From Date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ 
+                  width: 155,
+                  '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                }}
+              />
+              <Typography variant="body2" color="text.secondary" fontWeight={700}>to</Typography>
+              <TextField
+                size="small"
+                type="date"
+                label="To Date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ 
+                  width: 155,
+                  '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                }}
+              />
+            </Stack>
+          )}
+
           {/* Reset button */}
-          {(!selBanks.includes('ALL') || !selYears.includes('ALL') || dateFilter !== 'ALL' || selCols.length !== PIVOT_COLS.length) && (
+          {(!selBanks.includes('ALL') || !selYears.includes('ALL') || dateFilter !== 'ALL' || fromDate !== '' || toDate !== '' || selCols.length !== PIVOT_COLS.length) && (
             <Button
               variant="text"
               size="small"
-              onClick={() => { setSelBanks(['ALL']); setSelYears(['ALL']); setDateFilter('ALL'); setSelCols(PIVOT_COLS); }}
+              onClick={() => { 
+                setSelBanks(['ALL']); 
+                setSelYears(['ALL']); 
+                setDateFilter('ALL'); 
+                setFromDate(''); 
+                setToDate(''); 
+                setSelCols(PIVOT_COLS); 
+              }}
               sx={{ color: 'primary.main', fontWeight: 700, borderRadius: 2 }}
             >
               Reset Filters
